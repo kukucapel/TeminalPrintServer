@@ -18,35 +18,69 @@ app.get('/test', async (req, res) => {
 
 app.post('/print', async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, titleTop, titleBottom } = req.body;
+
     if (!text) return res.status(400).json({ error: 'text is required' });
 
     // Генерируем QR PNG
     const qrPng = await QRCode.toBuffer(text);
 
-    // Создаём PDF размером строго 80×80 мм
+    // Создаём PDF 80×80 мм
     const filename = `qr_${Date.now()}.pdf`;
     const doc = new PDFDocument({
-      size: [sizeInPixels, sizeInPixels], // страница 80x80 мм
+      size: [sizePx, sizePx],
       margins: { top: 0, left: 0, right: 0, bottom: 0 },
     });
 
     const stream = fs.createWriteStream(filename);
     doc.pipe(stream);
 
-    // Вставляем QR по размеру всей страницы
-    doc.image(qrPng, 0, 0, { width: sizeInPixels, height: sizeInPixels });
+    let y = 0;
+
+    // ---------- ТЕКСТ СВЕРХУ ----------
+    if (titleTop) {
+      doc.fontSize(14);
+      doc.text(titleTop, 0, y, {
+        width: sizePx,
+        align: 'center',
+      });
+      y += 28; // оставляем место под текст
+    }
+
+    // ---------- QR В СЕРЕДИНЕ ----------
+    const qrSize = sizePx - y - (titleBottom ? 28 : 0);
+    // выделим ~28px под нижний текст
+
+    doc.image(qrPng, (sizePx - qrSize) / 2, y, {
+      width: qrSize,
+      height: qrSize,
+    });
+
+    // ---------- ТЕКСТ СНИЗУ ----------
+    if (titleBottom) {
+      doc.fontSize(14);
+      doc.text(titleBottom, 0, sizePx - 28, {
+        width: sizePx,
+        align: 'center',
+      });
+    }
 
     doc.end();
 
-    stream.on('finish', async () => {
-      // Печать PDF (Windows)
-      await printer.print(filename);
+    // Корректно закрываем pdf-файл
+    stream.on('finish', () => stream.close());
 
-      // Удаляем PDF
+    stream.on('close', async () => {
+      try {
+        await printer.print(filename, {
+          // printer: "YourPrinterName"
+        });
+      } catch (err) {
+        console.error('Print error:', err);
+      }
+
       fs.unlinkSync(filename);
-
-      res.json({ status: 'printed 80x80 mm' });
+      res.json({ status: 'printed' });
     });
   } catch (e) {
     console.error(e);
