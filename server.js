@@ -8,17 +8,15 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// 80 мм → PDF в dpi=72
 const SIZE_MM = 80;
 const DPI = 72;
-const sizePx = (SIZE_MM / 25.4) * DPI;
+const sizePx = (SIZE_MM / 25.4) * DPI; // ≈ 226 px
 
 const FONT_PATH = path.join(__dirname, 'fonts', 'DejaVuSans.ttf');
 
 app.post('/print', async (req, res) => {
   try {
     const { text, titleTop, titleBottom } = req.body;
-
     if (!text) return res.status(400).json({ error: 'text is required' });
 
     const qrPng = await QRCode.toBuffer(text);
@@ -28,49 +26,54 @@ app.post('/print', async (req, res) => {
 
     const doc = new PDFDocument({
       size: [sizePx, sizePx],
-      margins: { top: 0, left: 0, right: 0, bottom: 0 },
+      margins: { top: 0, left: 0, right: 0 },
     });
 
     doc.pipe(stream);
-    doc.registerFont('unicode', FONT_PATH).font('unicode');
 
-    const padding = 10;
-    let y = padding;
+    doc.registerFont('unicode', FONT_PATH);
+    doc.font('unicode');
 
-    // ---------- Верхний текст (умеренный, точно влезает) ----------
+    // Жёсткая разметка
+    const TOP_PADDING = 10;
+    const TOP_TEXT_SIZE = 14;
+    const TOP_TEXT_HEIGHT = 16;
+    const AFTER_TOP_TEXT = 10;
+    const QR_SIZE = 150; // жестко фиксировано
+    const BEFORE_BOTTOM_TEXT = 10;
+    const BOTTOM_TEXT_SIZE = 12;
+    const BOTTOM_TEXT_HEIGHT = 14;
+    const BOTTOM_PADDING = 10;
+
+    let y = TOP_PADDING;
+
+    // ---- Верхний текст ----
     if (titleTop) {
-      doc.fontSize(14).text(titleTop, padding, y, {
-        width: sizePx - padding * 2,
+      doc.fontSize(TOP_TEXT_SIZE).text(titleTop, 10, y, {
+        width: sizePx - 20,
         align: 'center',
       });
-
-      y += 20; // расстояние после текста
     }
 
-    // ---------- QR-код ----------
-    // Заранее резервируем место на нижний текст
-    const bottomReserve = titleBottom ? 30 : 10;
+    y += TOP_TEXT_HEIGHT + AFTER_TOP_TEXT;
 
-    // Максимальный размер QR — 60% площади + гарантированный запас
-    const availableHeight = sizePx - y - bottomReserve;
-    const finalQR = Math.min(availableHeight, sizePx * 0.55);
-
-    doc.image(qrPng, (sizePx - finalQR) / 2, y, {
-      width: finalQR,
-      height: finalQR,
+    // ---- QR фиксированного размера ----
+    doc.image(qrPng, (sizePx - QR_SIZE) / 2, y, {
+      width: QR_SIZE,
+      height: QR_SIZE,
     });
 
-    y += finalQR + 10;
+    y += QR_SIZE + BEFORE_BOTTOM_TEXT;
 
-    // ---------- Нижний текст (компактный) ----------
+    // ---- Нижний текст ----
     if (titleBottom) {
-      doc.fontSize(11).text(titleBottom, padding, sizePx - padding - 16, {
-        width: sizePx - padding * 2,
+      doc.fontSize(BOTTOM_TEXT_SIZE).text(titleBottom, 10, y, {
+        width: sizePx - 20,
         align: 'center',
       });
     }
 
-    // ---------- Фейковая страница (фикс мигания) ----------
+    // ---- Фейковая страница для отключения мигания ----
     doc.addPage({ size: [1, 1] });
     doc.text('', 0, 0);
 
