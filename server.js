@@ -13,7 +13,7 @@ const SIZE_MM = 80;
 const DPI = 72;
 const sizePx = (SIZE_MM / 25.4) * DPI;
 
-// Пусть к Unicode-шрифту
+// Путь к Unicode-шрифту
 const FONT_PATH = path.join(__dirname, 'fonts', 'DejaVuSans.ttf');
 
 app.post('/print', async (req, res) => {
@@ -22,10 +22,10 @@ app.post('/print', async (req, res) => {
 
     if (!text) return res.status(400).json({ error: 'text is required' });
 
-    // QR-код в буфер
+    // QR-код
     const qrPng = await QRCode.toBuffer(text);
 
-    // Имя PDF
+    // PDF файл
     const filename = `qr_${Date.now()}.pdf`;
     const stream = fs.createWriteStream(filename);
 
@@ -36,60 +36,58 @@ app.post('/print', async (req, res) => {
 
     doc.pipe(stream);
 
-    // Шрифт
+    // Подключаем Unicode-шрифт
     doc.registerFont('unicode', FONT_PATH);
     doc.font('unicode');
 
-    // Внутренний отступ
+    // Внутренние отступы
     const padding = 10;
-
     let y = padding;
 
-    // ------- Верхний текст (увеличен) -------
+    // ------- Верхний текст (16 pt) -------
     if (titleTop) {
-      doc.fontSize(20).text(titleTop, padding, y, {
+      doc.fontSize(16).text(titleTop, padding, y, {
         width: sizePx - padding * 2,
         align: 'center',
       });
 
-      y += 28; // больше места под крупный текст
+      y += 24; // место после текста
     }
 
     // ------- QR-код (уменьшен) -------
-    // уменьшим QR ещё на паддинги сверху/снизу
-    const bottomReserve = titleBottom ? 28 + padding : padding;
+    const bottomReserve = titleBottom ? 22 + padding : padding;
     const qrSize = sizePx - y - bottomReserve;
-
-    const finalQR = qrSize * 0.85; // ещё +15% уменьшения чтобы точно всё влазило
+    const finalQR = qrSize * 0.85;
 
     doc.image(qrPng, (sizePx - finalQR) / 2, y, {
       width: finalQR,
       height: finalQR,
     });
 
-    // ------- Нижний текст -------
+    // ------- Нижний текст (12 pt) -------
     if (titleBottom) {
-      doc.fontSize(14).text(titleBottom, padding, sizePx - padding - 18, {
+      doc.fontSize(12).text(titleBottom, padding, sizePx - padding - 16, {
         width: sizePx - padding * 2,
         align: 'center',
       });
     }
 
-    // -------------------------------------------------
-    // ⚠️ Фейковая 2-я страница — фикс для исчезновения мигания
-    // -------------------------------------------------
+    // ----------------------------------------------------
+    // ⚠️ Фейковая 2-я страница — фикс мигания принтера
+    // ----------------------------------------------------
     doc.addPage({ size: [1, 1] });
-    doc.text('', 0, 0); // полностью пустая
-    // -------------------------------------------------
+    doc.text('', 0, 0);
+    // ----------------------------------------------------
 
     doc.end();
 
-    // завершение потока
+    // Закрываем поток PDF
     stream.on('finish', () => stream.close());
 
     stream.on('close', async () => {
       try {
         await printer.print(filename, {
+          // Если нужно указать принтер:
           // printer: "YourPrinterName"
         });
       } catch (err) {
