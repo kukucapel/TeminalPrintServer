@@ -1,8 +1,8 @@
 {
   "dependencies": {
-    "escpos": "^3.0.0-alpha.6",
-    "escpos-usb": "^3.0.0-alpha.4",
     "express": "^5.2.1",
+    "pdf-to-printer": "^5.6.1",
+    "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4"
   }
 }
