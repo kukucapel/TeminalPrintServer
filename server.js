@@ -8,13 +8,24 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// 80 мм → точки PDF (72 dpi)
+// 80 мм → точки (72 dpi)
 const SIZE_MM = 80;
 const DPI = 72;
 const sizePx = (SIZE_MM / 25.4) * DPI;
 
-// Путь к Unicode-шрифту
+// Unicode-шрифт
 const FONT_PATH = path.join(__dirname, 'fonts', 'DejaVuSans.ttf');
+
+// Функция авто-уменьшения шрифта до нужной ширины
+function fitText(doc, text, maxWidth, initialSize) {
+  let size = initialSize;
+  doc.fontSize(size);
+  while (doc.widthOfString(text) > maxWidth && size > 6) {
+    size -= 1;
+    doc.fontSize(size);
+  }
+  return size;
+}
 
 app.post('/print', async (req, res) => {
   try {
@@ -22,10 +33,8 @@ app.post('/print', async (req, res) => {
 
     if (!text) return res.status(400).json({ error: 'text is required' });
 
-    // QR картинка
     const qrPng = await QRCode.toBuffer(text);
 
-    // PDF
     const filename = `qr_${Date.now()}.pdf`;
     const doc = new PDFDocument({
       size: [sizePx, sizePx],
@@ -35,32 +44,34 @@ app.post('/print', async (req, res) => {
     const stream = fs.createWriteStream(filename);
     doc.pipe(stream);
 
-    // ЗАГРУЖАЕМ UNICODE ШРИФТ (важно!)
     doc.registerFont('unicode', FONT_PATH);
     doc.font('unicode');
 
     let y = 0;
 
-    // Верхний текст
+    // Верхний текст (авто-уменьшение)
     if (titleTop) {
-      doc.fontSize(16).text(titleTop, 0, y, {
+      const fontSize = fitText(doc, titleTop, sizePx - 10, 14);
+      doc.fontSize(fontSize).text(titleTop, 0, y, {
         width: sizePx,
         align: 'center',
       });
-      y += 30;
+      y += fontSize + 6;
     }
 
-    // QR-код
-    const qrSize = sizePx - y - (titleBottom ? 30 : 0);
+    // QR-код (оставляем место под нижний текст)
+    const qrPaddingBottom = titleBottom ? 25 : 0;
+    const qrSize = sizePx - y - qrPaddingBottom;
 
     doc.image(qrPng, (sizePx - qrSize) / 2, y, {
       width: qrSize,
       height: qrSize,
     });
 
-    // Нижний текст
+    // Нижний текст (авто-уменьшение)
     if (titleBottom) {
-      doc.fontSize(16).text(titleBottom, 0, sizePx - 30, {
+      const fontSizeB = fitText(doc, titleBottom, sizePx - 10, 14);
+      doc.fontSize(fontSizeB).text(titleBottom, 0, sizePx - (fontSizeB + 6), {
         width: sizePx,
         align: 'center',
       });
@@ -68,7 +79,6 @@ app.post('/print', async (req, res) => {
 
     doc.end();
 
-    // Полностью закрываем поток
     stream.on('finish', () => stream.close());
 
     stream.on('close', async () => {
