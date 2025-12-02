@@ -7,6 +7,10 @@ app.use(express.json());
 
 const PRINTER_NAME = 'CUSTOM VKP80III';
 
+app.get('/test', async (req, res) => {
+  res.status(200).send('Ok');
+});
+
 app.post('/print', async (req, res) => {
   const { data } = req.body;
   if (!data) return res.status(400).send('missing data');
