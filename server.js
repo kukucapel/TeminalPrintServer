@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
@@ -6,6 +7,11 @@ const PDFDocument = require('pdfkit');
 const printer = require('pdf-to-printer'); // ← печать
 
 const app = express();
+app.use(
+  cors({
+    origin: '*',
+  })
+);
 app.use(express.json());
 
 const SIZE_MM = 80;
