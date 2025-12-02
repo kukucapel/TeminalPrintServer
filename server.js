@@ -3,18 +3,18 @@ const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const printer = require('pdf-to-printer');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
 
-const PRINTER_NAME = 'CUSTOM VKP80III';
+// 80 мм → точки PDF (72 dpi)
 const SIZE_MM = 80;
 const DPI = 72;
-const sizePx = (SIZE_MM / 25.4) * DPI; // ≈226px
+const sizePx = (SIZE_MM / 25.4) * DPI;
 
-app.get('/test', async (req, res) => {
-  res.status(200).send('Ok');
-});
+// Путь к Unicode-шрифту
+const FONT_PATH = path.join(__dirname, 'fonts', 'DejaVuSans.ttf');
 
 app.post('/print', async (req, res) => {
   try {
@@ -22,10 +22,10 @@ app.post('/print', async (req, res) => {
 
     if (!text) return res.status(400).json({ error: 'text is required' });
 
-    // Генерируем QR PNG
+    // QR картинка
     const qrPng = await QRCode.toBuffer(text);
 
-    // Создаём PDF 80×80 мм
+    // PDF
     const filename = `qr_${Date.now()}.pdf`;
     const doc = new PDFDocument({
       size: [sizePx, sizePx],
@@ -35,31 +35,32 @@ app.post('/print', async (req, res) => {
     const stream = fs.createWriteStream(filename);
     doc.pipe(stream);
 
+    // ЗАГРУЖАЕМ UNICODE ШРИФТ (важно!)
+    doc.registerFont('unicode', FONT_PATH);
+    doc.font('unicode');
+
     let y = 0;
 
-    // ---------- ТЕКСТ СВЕРХУ ----------
+    // Верхний текст
     if (titleTop) {
-      doc.fontSize(14);
-      doc.text(titleTop, 0, y, {
+      doc.fontSize(16).text(titleTop, 0, y, {
         width: sizePx,
         align: 'center',
       });
-      y += 28; // оставляем место под текст
+      y += 30;
     }
 
-    // ---------- QR В СЕРЕДИНЕ ----------
-    const qrSize = sizePx - y - (titleBottom ? 28 : 0);
-    // выделим ~28px под нижний текст
+    // QR-код
+    const qrSize = sizePx - y - (titleBottom ? 30 : 0);
 
     doc.image(qrPng, (sizePx - qrSize) / 2, y, {
       width: qrSize,
       height: qrSize,
     });
 
-    // ---------- ТЕКСТ СНИЗУ ----------
+    // Нижний текст
     if (titleBottom) {
-      doc.fontSize(14);
-      doc.text(titleBottom, 0, sizePx - 28, {
+      doc.fontSize(16).text(titleBottom, 0, sizePx - 30, {
         width: sizePx,
         align: 'center',
       });
@@ -67,13 +68,13 @@ app.post('/print', async (req, res) => {
 
     doc.end();
 
-    // Корректно закрываем pdf-файл
+    // Полностью закрываем поток
     stream.on('finish', () => stream.close());
 
     stream.on('close', async () => {
       try {
         await printer.print(filename, {
-          // printer: "YourPrinterName"
+          // printer: "YourPrinter"
         });
       } catch (err) {
         console.error('Print error:', err);
@@ -88,4 +89,4 @@ app.post('/print', async (req, res) => {
   }
 });
 
-app.listen(3333, () => console.log('Print server running on 3333'));
+app.listen(3000, () => console.log('Running at http://localhost:3000'));
