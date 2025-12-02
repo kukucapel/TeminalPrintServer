@@ -5,7 +5,7 @@ const QRCode = require('qrcode');
 const app = express();
 app.use(express.json());
 
-const PRINTER_NAME = 'ТВОЁ_ИМЯ_ПРИНТЕРА_ИЗ_УСТРОЙСТВ';
+const PRINTER_NAME = 'CUSTOM VKP80III';
 
 app.post('/print', async (req, res) => {
   const { data } = req.body;
