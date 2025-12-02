@@ -10,7 +10,7 @@ app.use(express.json());
 const PRINTER_NAME = 'CUSTOM VKP80III';
 const SIZE_MM = 80;
 const DPI = 72;
-const sizeInPixels = (SIZE_MM / 25.4) * DPI; // 226 px
+const sizePx = (SIZE_MM / 25.4) * DPI; // ≈226px
 
 app.get('/test', async (req, res) => {
   res.status(200).send('Ok');
