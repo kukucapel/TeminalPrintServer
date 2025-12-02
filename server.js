@@ -13,7 +13,6 @@ const SIZE_MM = 80;
 const DPI = 72;
 const sizePx = (SIZE_MM / 25.4) * DPI;
 
-// Путь к Unicode-шрифту
 const FONT_PATH = path.join(__dirname, 'fonts', 'DejaVuSans.ttf');
 
 app.post('/print', async (req, res) => {
@@ -22,10 +21,8 @@ app.post('/print', async (req, res) => {
 
     if (!text) return res.status(400).json({ error: 'text is required' });
 
-    // QR-код
     const qrPng = await QRCode.toBuffer(text);
 
-    // PDF файл
     const filename = `qr_${Date.now()}.pdf`;
     const stream = fs.createWriteStream(filename);
 
@@ -35,61 +32,55 @@ app.post('/print', async (req, res) => {
     });
 
     doc.pipe(stream);
+    doc.registerFont('unicode', FONT_PATH).font('unicode');
 
-    // Подключаем Unicode-шрифт
-    doc.registerFont('unicode', FONT_PATH);
-    doc.font('unicode');
-
-    // Внутренние отступы
     const padding = 10;
     let y = padding;
 
-    // ------- Верхний текст (16 pt) -------
+    // ---------- Верхний текст (умеренный, точно влезает) ----------
     if (titleTop) {
-      doc.fontSize(16).text(titleTop, padding, y, {
+      doc.fontSize(14).text(titleTop, padding, y, {
         width: sizePx - padding * 2,
         align: 'center',
       });
 
-      y += 24; // место после текста
+      y += 20; // расстояние после текста
     }
 
-    // ------- QR-код (уменьшен) -------
-    const bottomReserve = titleBottom ? 22 + padding : padding;
-    const qrSize = sizePx - y - bottomReserve;
-    const finalQR = qrSize * 0.85;
+    // ---------- QR-код ----------
+    // Заранее резервируем место на нижний текст
+    const bottomReserve = titleBottom ? 30 : 10;
+
+    // Максимальный размер QR — 60% площади + гарантированный запас
+    const availableHeight = sizePx - y - bottomReserve;
+    const finalQR = Math.min(availableHeight, sizePx * 0.55);
 
     doc.image(qrPng, (sizePx - finalQR) / 2, y, {
       width: finalQR,
       height: finalQR,
     });
 
-    // ------- Нижний текст (12 pt) -------
+    y += finalQR + 10;
+
+    // ---------- Нижний текст (компактный) ----------
     if (titleBottom) {
-      doc.fontSize(12).text(titleBottom, padding, sizePx - padding - 16, {
+      doc.fontSize(11).text(titleBottom, padding, sizePx - padding - 16, {
         width: sizePx - padding * 2,
         align: 'center',
       });
     }
 
-    // ----------------------------------------------------
-    // ⚠️ Фейковая 2-я страница — фикс мигания принтера
-    // ----------------------------------------------------
+    // ---------- Фейковая страница (фикс мигания) ----------
     doc.addPage({ size: [1, 1] });
     doc.text('', 0, 0);
-    // ----------------------------------------------------
 
     doc.end();
 
-    // Закрываем поток PDF
     stream.on('finish', () => stream.close());
 
     stream.on('close', async () => {
       try {
-        await printer.print(filename, {
-          // Если нужно указать принтер:
-          // printer: "YourPrinterName"
-        });
+        await printer.print(filename);
       } catch (err) {
         console.error('Print error:', err);
       }
